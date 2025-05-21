@@ -1167,7 +1167,7 @@ struct MAX17205Driver {
  */
 #define MAX17205_SETVAL(reg, val)           (((uint16_t)(val) & ~ (reg ## _PermMsk)) | reg ## _PermSet)
 #define MAX17205_RSENSE2REG(val)            ((uint16_t)(val / 10U))
-#define MAX17205_REG2RSENSE(val)            ((uint16_t)(val * 10U))
+#define MAX17205_REG2RSENSE(val)            ((uint16_t)(val * 10U))  // register LSB = 10uOhms; * 10 makes this return in units of uOhms
 
 /*===========================================================================*/
 /* External declarations.                                                    */
@@ -1190,7 +1190,7 @@ msg_t max17205ReadBattVoltage(MAX17205Driver *devp, uint16_t reg, uint16_t *dest
 msg_t max17205ReadCurrent(MAX17205Driver *devp, uint16_t reg, int16_t *dest);
 msg_t max17205ReadTemperature(MAX17205Driver *devp, uint16_t reg, int16_t *dest);
 msg_t max17205ReadAverageTemperature(MAX17205Driver *devp, uint16_t reg, int16_t *dest);
-msg_t max17205ReadTime(MAX17205Driver *devp, uint16_t reg, uint16_t *dest);
+msg_t max17205ReadTime(MAX17205Driver *devp, uint16_t reg, uint32_t *dest);
 msg_t max17205ReadResistance(MAX17205Driver *devp, uint16_t reg, uint16_t *dest);
 
 msg_t max17205HardwareReset(I2CDriver *i2cp);

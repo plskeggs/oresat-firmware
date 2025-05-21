@@ -406,14 +406,14 @@ msg_t max17205WriteRaw(MAX17205Driver *devp, uint16_t reg, uint16_t value) {
 msg_t max17205ReadCapacity(MAX17205Driver *devp, const uint16_t reg, uint16_t *dest)
 {
 	uint16_t reg_value = 0;
-	const msg_t r = max17205ReadRaw(devp, reg, &reg_value);
+	const msg_t r = max17205ReadRaw(devp, reg, &reg_value);  // LSB = 5.0 uVh; divide by Rsense in ohms to get uAh
 
 	if( r == MSG_OK ) {
 		uint16_t nr_sense_value = 0;
 
 		const msg_t r2 = max17205ReadRaw(devp, MAX17205_AD_NRSENSE, &nr_sense_value);
 		if( r2 == MSG_OK ) {
-			*dest = reg_value * 5000U / MAX17205_REG2RSENSE(nr_sense_value);
+			*dest = reg_value * 5000U / MAX17205_REG2RSENSE(nr_sense_value); // register LSB = 10uOhms; * 10 makes this return in units of uOhms; multiply by 5 to get uAh then by 1000 to get mAh
 
 			dbgprintf("  max17205ReadCapacityChecked(0x%X %s) = %u mAh (raw: %u 0x%X)\r\n", reg, max17205RegToStr(reg), *dest, reg_value, reg_value);
 		} else {
@@ -592,9 +592,9 @@ msg_t max17205ReadResistance(MAX17205Driver *devp, uint16_t reg, uint16_t *dest)
  *
  * @api
  */
-msg_t max17205ReadTime(MAX17205Driver *devp, uint16_t reg, uint16_t *dest)
+msg_t max17205ReadTime(MAX17205Driver *devp, uint16_t reg, uint32_t *dest)
 {
-	uint16_t temp = 0;
+	uint32_t temp = 0;
     msg_t r = max17205ReadRaw(devp, reg, &temp);
     if( r == MSG_OK ) {
     	*dest = temp * 5625U / 1000;

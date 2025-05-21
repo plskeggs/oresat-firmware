@@ -6,8 +6,9 @@
 #include "OD.h"
 
 #define ENABLE_NV_MEMORY_UPDATE_CODE      0
-#define ENABLE_SERIAL_DEBUG_OUTPUT        0
+#define ENABLE_SERIAL_DEBUG_OUTPUT        1
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 #if ENABLE_SERIAL_DEBUG_OUTPUT || ENABLE_NV_MEMORY_UPDATE_CODE
 #define DEBUG_SERIAL    (BaseSequentialStream*) &SD2
@@ -132,8 +133,8 @@ typedef struct {
     uint16_t present_state_of_charge; //Percent
     uint16_t reported_state_of_charge; //Percent
 
-    uint16_t time_to_full_seconds;
-    uint16_t time_to_empty_seconds;
+    uint32_t time_to_full_seconds;
+    uint32_t time_to_empty_seconds;
 
     uint16_t full_capacity_mAh;
     uint16_t available_capacity_mAh;
@@ -507,8 +508,8 @@ void populate_od_pack_data(batt_pack_data_t *pack_data) {
         OD_RAM.x4000_pack_1.current_min = pack_data->min_current_mA;
         OD_RAM.x4000_pack_1.full_capacity = pack_data->full_capacity_mAh;
         OD_RAM.x4000_pack_1.reported_capacity = pack_data->reported_capacity_mAh;
-        OD_RAM.x4000_pack_1.time_to_empty = pack_data->time_to_empty_seconds;
-        OD_RAM.x4000_pack_1.time_to_full = pack_data->time_to_full_seconds;
+        OD_RAM.x4000_pack_1.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
+        OD_RAM.x4000_pack_1.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
         OD_RAM.x4000_pack_1.cycles = pack_data->cycles;
         OD_RAM.x4000_pack_1.reported_state_of_charge = pack_data->reported_state_of_charge;
         OD_RAM.x4000_pack_1.temperature = (int8_t)(pack_data->temp_1_C);
@@ -548,8 +549,8 @@ void populate_od_pack_data(batt_pack_data_t *pack_data) {
         OD_RAM.x4001_pack_2.current_min = pack_data->min_current_mA;
         OD_RAM.x4001_pack_2.full_capacity = pack_data->full_capacity_mAh;
         OD_RAM.x4001_pack_2.reported_capacity = pack_data->reported_capacity_mAh;
-        OD_RAM.x4001_pack_2.time_to_empty = pack_data->time_to_empty_seconds;
-        OD_RAM.x4001_pack_2.time_to_full = pack_data->time_to_full_seconds;
+        OD_RAM.x4001_pack_2.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
+        OD_RAM.x4001_pack_2.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
         OD_RAM.x4001_pack_2.cycles = pack_data->cycles;
         OD_RAM.x4001_pack_2.reported_state_of_charge = pack_data->reported_state_of_charge;
         OD_RAM.x4001_pack_2.temperature = (int8_t)(pack_data->temp_1_C);
