@@ -36,7 +36,8 @@
  */
 msg_t max17205Read(MAX17205Driver *devp, uint16_t reg, uint16_t *dest) {
     osalDbgCheck(devp != NULL);
-    osalDbgAssert(devp->state == MAX17205_READY,
+    osalDbgAssert((devp->state == MAX17205_STOP) ||
+            (devp->state == MAX17205_READY),
             "max17205ReadRaw(), invalid state");
 
     I2CDriver * i2c = devp->config->i2cp;
@@ -65,7 +66,8 @@ msg_t max17205Read(MAX17205Driver *devp, uint16_t reg, uint16_t *dest) {
  */
 msg_t max17205Write(MAX17205Driver *devp, uint16_t reg, uint16_t value) {
     osalDbgCheck(devp != NULL);
-    osalDbgAssert(devp->state == MAX17205_READY,
+    osalDbgAssert((devp->state == MAX17205_STOP) ||
+            (devp->state == MAX17205_READY),
             "max17205WriteRaw(), invalid state");
 
     I2CDriver * i2c = devp->config->i2cp;
