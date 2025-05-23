@@ -377,7 +377,7 @@ bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
 }
 
 /**
- * Helper function to trigger write of volatile memory on MAX71205 chip. 
+ * Helper function to trigger write of volatile memory on MAX71205 chip.
  * Returns true if NV was written, false otherwise.
  */
 bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {

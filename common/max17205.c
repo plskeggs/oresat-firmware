@@ -92,11 +92,11 @@ void max17205ObjectInit(MAX17205Driver *devp) {
 }
 
 /**
- * @brief   Firmware reset the chip. Allows it to utilize any 
+ * @brief   Firmware reset the chip. Allows it to utilize any
  *          changes written to the shadow RAM register.
- *  
+ *
  * @param[in] devp      pointer to the @p MAX17205Driver object
- * 
+ *
  * @api
  */
 msg_t max17205FirmwareReset(MAX17205Driver * devp) {
@@ -112,11 +112,11 @@ msg_t max17205FirmwareReset(MAX17205Driver * devp) {
 }
 
 /**
- * @brief   Hardware reset the chip. Reloads nonvolatile 
+ * @brief   Hardware reset the chip. Reloads nonvolatile
  *          registers into shadow RAM.
- *  
+ *
  * @param[in] devp      pointer to the @p MAX17205Driver object
- * 
+ *
  * @api
  */
 msg_t max17205HardwareReset(MAX17205Driver * devp) {
