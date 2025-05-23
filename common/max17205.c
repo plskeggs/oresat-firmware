@@ -335,7 +335,7 @@ msg_t max17205ReadCurrent(MAX17205Driver *devp, uint16_t reg, int16_t *dest_mA) 
     msg_t r = max17205Read(devp, reg, &buf);
     if (r == MSG_OK) {
         // Referencce datasheet table 1: Current LSB is 1.5625μV/RSENSE, signed.
-        *dest_mA = (int16_t)(((int32_t)buf * 15625) / (devp->rsense_uOhm * 10));
+        *dest_mA = (int16_t)((((int32_t)((int16_t)buf)) * 15625) / (devp->rsense_uOhm * 10));
         dbgprintf("  max17205ReadCurrent(0x%X %s) = %d mA (raw: 0x%X)\r\n",
             reg, max17205RegToStr(reg), *dest_mA, buf);
     }
@@ -726,6 +726,8 @@ const char* max17205RegToStr(const uint16_t reg) {
             return "MAX17205_AD_AVGINTTEMP";
         case MAX17205_AD_REPCAP:
             return "MAX17205_AD_REPCAP";
+        case MAX17205_AD_VFREMCAP:
+            return "MAX17205_AD_VFREMCAP";
         case MAX17205_AD_PACKCFG:
             return "MAX17205_AD_PACKCFG";
         case MAX17205_AD_DESIGNCAP:

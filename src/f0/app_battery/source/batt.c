@@ -333,7 +333,7 @@ bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
     if( (r = max17205ReadCapacity(driver, MAX17205_AD_MIXCAP, &dest->mix_capacity_mAh)) != MSG_OK ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205ReadCapacity(driver, MAX17205_AD_REPCAP, &dest->reported_capacity_mAh)) != MSG_OK ) {
+    if( (r = max17205ReadCapacity(driver, /*MAX17205_AD_REPCAP*/ MAX17205_AD_VFREMCAP, &dest->reported_capacity_mAh)) != MSG_OK ) {
         dest->is_data_valid = false;
     }
 
@@ -395,7 +395,7 @@ bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
             dbgprintf("Failed to read reg value\r\n");
             continue;
         }
-        dbgprintf("   %-30s register 0x%X is 0x%X     expected  0x%X\r\n",
+        dbgprintf("   %-30s register 0x%04X is 0x%04X     expected  0x%04X\r\n",
             max17205RegToStr(batt_nv_programing_cfg[idx].reg), batt_nv_programing_cfg[idx].reg,
             reg_value, batt_nv_programing_cfg[idx].value
         );
@@ -426,7 +426,7 @@ bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
             dbgprintf("Failed to read reg value\r\n");
             continue;
         }
-        dbgprintf("   %-30s register 0x%X is 0x%X     expected  0x%X\r\n",
+        dbgprintf("   %-30s register 0x%04X is 0x%04X     expected  0x%04X\r\n",
             max17205RegToStr(batt_nv_programing_cfg[idx].reg), batt_nv_programing_cfg[idx].reg,
             reg_value, batt_nv_programing_cfg[idx].value
         );
@@ -450,6 +450,8 @@ bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
             dbgprintf("Failed to write non volatile memory on MAX17205...\r\n");
         }
         return true; // NV changes made
+    } else {
+        max17205FirmwareReset(devp);
     }
 #else
     //Now make the chip use the changes written to the shadow registers.
