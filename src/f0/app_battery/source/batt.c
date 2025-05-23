@@ -336,7 +336,7 @@ bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
     if( (r = max17205ReadCapacity(driver, MAX17205_AD_MIXCAP, &dest->mix_capacity_mAh)) != MSG_OK ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205ReadCapacity(driver, MAX17205_AD_REPCAP, &dest->reported_capacity_mAh)) != MSG_OK ) {
+    if( (r = max17205ReadCapacity(driver, /*MAX17205_AD_REPCAP*/ MAX17205_AD_VFREMCAP, &dest->reported_capacity_mAh)) != MSG_OK ) {
         dest->is_data_valid = false;
     }
 
@@ -439,10 +439,10 @@ bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
         }
         return true; // NV changes made
     }
-#else
+#endif
+
     //Now make the chip use the changes written to the shadow registers.
     max17205FirmwareReset(devp);
-#endif
     return false; // no NV changes made
 }
 
