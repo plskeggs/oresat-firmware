@@ -882,10 +882,14 @@ const char* max17205RegToStr(const uint16_t reg) {
             return "MAX17205_AD_AVGCURRENT";
         case MAX17205_AD_BATT:
             return "MAX17205_AD_BATT";
-        case MAX17205_AD_AVGTEMP1:
-            return "MAX17205_AD_AVGTEMP1";
         case MAX17205_AD_TEMP1:
             return "MAX17205_AD_TEMP1";
+        case MAX17205_AD_TEMP2:
+            return "MAX17205_AD_TEMP2";
+        case MAX17205_AD_INTTEMP:
+            return "MAX17205_AD_INTTEMP";
+        case MAX17205_AD_AVGTEMP1:
+            return "MAX17205_AD_AVGTEMP1";
         case MAX17205_AD_AVGTEMP2:
             return "MAX17205_AD_AVGTEMP2";
         case MAX17205_AD_AVGINTTEMP:
