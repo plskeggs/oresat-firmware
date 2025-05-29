@@ -284,6 +284,20 @@ msg_t max17205ReadCapacity(MAX17205Driver *devp, const uint16_t reg, uint32_t *d
     return r;
 }
 
+msg_t max17205WriteCapacity(MAX17205Driver *devp, const uint16_t reg, uint32_t dest_mAh) {
+    osalDbgAssert(devp->state == MAX17205_READY, "max17205WriteCapacity(), invalid state");
+
+    uint16_t buf = 0;
+    // Reference datasheet table 1: Capacity LSB is 5.0μVh/RSENSE where Vh/R=Ah, unsigned.
+    buf = (uint16_t)((dest_mAh * devp->rsense_uOhm) / 5000U);
+    const msg_t r = max17205Write(devp, reg, buf);
+    if (r == MSG_OK) {
+        dbgprintf("  max17205WriteCapacity(0x%X %s) = %u mAh (raw: 0x%X)\r\n",
+            reg, max17205RegToStr(reg), dest_mAh, buf);
+    }
+    return r;
+}
+
 
 /**
  * @brief   Reads an MAX17205 percentage value from a register in 1% increments.
@@ -551,6 +565,23 @@ msg_t max17205ReadTime(MAX17205Driver *devp, uint16_t reg, uint32_t *dest_S) {
     return r;
 }
 
+msg_t max17205ReadLearnState(MAX17205Driver *devp, uint8_t *dest) {
+    osalDbgAssert(devp->state == MAX17205_READY, "max17205ReadLearnState(), invalid state");
+    uint16_t buf = 0;
+    msg_t r = max17205Read(devp, MAX17205_AD_NLEARNCFG, &buf);
+    if (r == MSG_OK) {
+        *dest = _FLD2VAL(MAX17205_LEARNCFG_LS, buf);
+    }
+    return r;
+}
+
+msg_t max17205WriteLearnState(MAX17205Driver *devp, uint8_t state) {
+    osalDbgAssert(devp->state == MAX17205_READY, "max17205WriteLearnState(), invalid state");
+    uint16_t buf = MAX17205_SETVAL(MAX17205_AD_NLEARNCFG, _VAL2FLD(MAX17205_LEARNCFG_LS, state));
+    msg_t r = max17205Write(devp, MAX17205_AD_NLEARNCFG, buf);
+    return r;
+}
+
 /**
  * The MAX17205 allows for the NV ram to be written no more then 7 times on a single chip.
  * Each time, an additional bit is set in a flash register which can be queried.
@@ -655,9 +686,6 @@ msg_t max17205ValidateRegisters(MAX17205Driver *devp, const max17205_regval_t * 
     dbgprintf("Current and expected NV settings:\r\n");
     for (size_t i = 0; i < len; ++i) {
         uint16_t buf = 0;
-        if (!list[i].reg && !list[i].value) { // Sentinel value
-            break;
-        }
         msg_t r = max17205Read(devp, list[i].reg, &buf);
         if (r != MSG_OK) {
             return r;
@@ -679,9 +707,6 @@ msg_t max17205ValidateRegisters(MAX17205Driver *devp, const max17205_regval_t * 
 msg_t max17205WriteRegisters(MAX17205Driver *devp, const max17205_regval_t * list, size_t len) {
     osalDbgAssert(devp->state == MAX17205_READY, "max17205WriteRegisters(), invalid state");
     for (size_t i = 0; i < len; ++i) {
-        if (!list[i].reg && !list[i].value) { // Sentinel value
-            break;
-        }
         msg_t r = max17205Write(devp, list[i].reg, list[i].value);
         if (r != MSG_OK) {
             return r;
@@ -712,7 +737,7 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
         if (r != MSG_OK) {
             return r;
         }
-        dbgprintf("   %-30s register 0x%X is 0x%X\r\n", max17205RegToStr(volatile_reg_list[i]), volatile_reg_list[i], buf);
+        dbgprintf("   %-30s register 0x%04X is 0x%04X\r\n", max17205RegToStr(volatile_reg_list[i]), volatile_reg_list[i], buf);
     }
 
     // See table 19 on page 83 of the data sheet to see the list of non-volatile registers
@@ -815,7 +840,7 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
         if (r != MSG_OK) {
             return r;
         }
-        dbgprintf("   %-30s register 0x%X is 0x%X\r\n", max17205RegToStr(reg_list[i]), reg_list[i], buf);
+        dbgprintf("   %-30s register 0x%04X is 0x%04X\r\n", max17205RegToStr(reg_list[i]), reg_list[i], buf);
     }
     return MSG_OK;
 }
