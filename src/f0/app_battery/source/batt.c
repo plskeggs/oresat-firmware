@@ -171,7 +171,7 @@ static void run_battery_heating_state_machine(batt_pack_data_t *pk1_data, batt_p
         palClearLine(LINE_HEATER_ON_1);
         palClearLine(LINE_HEATER_ON_2);
         palClearLine(LINE_MOARPWR);
-
+        dbgprintf("FAILSAFE: turning heaters OFF\r\n");
         //CO_errorReport(CO->em, CO_EM_GENERIC_ERROR, CO_EMC_HARDWARE, BATTERY_OD_ERROR_INFO_CODE_PACK_FAIL_SAFE_HEATING);
         return;
     }
@@ -179,28 +179,30 @@ static void run_battery_heating_state_machine(batt_pack_data_t *pk1_data, batt_p
 
     switch (current_battery_state_machine_state) {
         case BATTERY_STATE_MACHINE_STATE_HEATING:
-            dbgprintf("Turning heaters ON\r\n");
             palSetLine(LINE_MOARPWR);
             palSetLine(LINE_HEATER_ON_1);
             palSetLine(LINE_HEATER_ON_2);
-            //Once they’re greater than 5 °C or the combined pack capacity is < 25%
 
+            //Once they’re greater than 5 °C or the combined pack capacity is < 25%
             if( (pk1_data->avg_temp_1_C > 5 && pk2_data->avg_temp_1_C > 5) || (total_state_of_charge < 25) ) {
                 current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
+                dbgprintf("Turning heaters OFF\r\n");
             }
             break;
         case BATTERY_STATE_MACHINE_STATE_NOT_HEATING:
-            dbgprintf("Turning heaters OFF\r\n");
             palClearLine(LINE_HEATER_ON_1);
             palClearLine(LINE_HEATER_ON_2);
             palClearLine(LINE_MOARPWR);
 
+            //Once they’re less than -5 °C and the combined pack capacity is > 25%
             if( (pk1_data->avg_temp_1_C < -5 || pk2_data->avg_temp_1_C < -5) && (pk1_data->present_state_of_charge > 25 || pk2_data->present_state_of_charge > 25) ) {
                 current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_HEATING;
+                dbgprintf("Turning heaters ON\r\n");
             }
             break;
         default:
             current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
+            dbgprintf("Unknown state: turning heaters OFF\r\n");
             break;
     }
 }
@@ -420,7 +422,6 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
         dbgprintf("One or more NV RAM elements don't match expected values...\r\n");
     }
 
-#if ENABLE_NV_MEMORY_UPDATE_CODE && defined(DEBUG_PRINT)
     r = max17205WriteRegisters(devp, batt_nv_programing_cfg, ARRAY_LEN(batt_nv_programing_cfg));
     if (r != MSG_OK) {
         dbgprintf("Failed to write new NV RAM reg values\n");
@@ -440,22 +441,28 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
         dbgprintf("All NV RAM elements now match expected values.\r\n");
     }
 
-    // Answer n to just use the changes in the volatile registers
-    dbgprintf("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
-    uint8_t ch = 0;
-    sdRead(DEBUG_SD, &ch, 1);
-    dbgprintf("\r\n");
+#if ENABLE_NV_MEMORY_UPDATE_CODE && defined(DEBUG_PRINT)
 
-    if (ch == 'y') {
-        dbgprintf("Attempting to write non volatile memory on MAX17205...\r\n");
-        chThdSleepMilliseconds(50);
+    if (num_writes_left > 0) {
+        // Answer n to just use the changes in the volatile registers
+        dbgprintf("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
+        uint8_t ch = 0;
+        sdRead(DEBUG_SD, &ch, 1);
+        dbgprintf("\r\n");
 
-        if (max17205NonvolatileBlockProgram(devp) == MSG_OK ) {
-            dbgprintf("Successfully wrote non volatile memory on MAX17205...\r\n");
-        } else {
-            dbgprintf("Failed to write non volatile memory on MAX17205...\r\n");
+        if (ch == 'y') {
+            dbgprintf("Attempting to write non volatile memory on MAX17205...\r\n");
+            chThdSleepMilliseconds(50);
+
+            if (max17205NonvolatileBlockProgram(devp) == MSG_OK ) {
+                dbgprintf("Successfully wrote non volatile memory on MAX17205...\r\n");
+            } else {
+                dbgprintf("Failed to write non volatile memory on MAX17205...\r\n");
+            }
+            return true; // NV changes made
         }
-        return true; // NV changes made
+    } else {
+        dbgprintf("No more NV writes remain.\r\n");
     }
 #endif
 
@@ -494,7 +501,11 @@ static void prompt_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pac
             dbgprintf("Error checking learn state\r\n");
             return;
         }
-        dbgprintf("Learning state set = %u\r\n", state);
+        if (state != 7) {
+            dbgprintf("Error setting state = %u; is %u\r\n", 7, state);
+        } else {
+            dbgprintf("Learning state set = %u\r\n", state);
+        }
         pack->mix_capacity_mAh = pack->reported_capacity_mAh = pack->full_capacity_mAh;
         if ( (r = max17205WriteCapacity(devp, MAX17205_AD_MIXCAP, pack->mix_capacity_mAh)) != MSG_OK ) {
             dbgprintf("Failed to write MIXCAP\r\n");
@@ -669,9 +680,13 @@ THD_FUNCTION(batt, arg)
         update_battery_charging_state(&pack_1_data, LINE_DCHG_DIS_PK1, LINE_CHG_DIS_PK1);
         update_battery_charging_state(&pack_2_data, LINE_DCHG_DIS_PK2, LINE_CHG_DIS_PK2);
 
-        if (loop == 20) {
+        if ((loop % 240) == 0) {
             prompt_learning_complete(&max17205devPack1, &pack_1_data);
             prompt_learning_complete(&max17205devPack2, &pack_2_data);
+        }
+        if ((loop % 1200) == 0) {
+            max17205PrintintNonvolatileMemory(&max17205devPack1);
+            max17205PrintintNonvolatileMemory(&max17205devPack2);
         }
     }
 
