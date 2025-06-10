@@ -845,6 +845,133 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
     return MSG_OK;
 }
 
+uint16_t history_data[203][16];
+uint8_t history_length;
+
+msg_t max17205ReadHistory(MAX17205Driver *devp)
+{
+    int i;
+    msg_t r;
+    uint16_t write_flags[26];
+    uint16_t valid_flags[26];
+    uint8_t page_good[203];
+
+    //Read all flag information from the IC
+    r = max17205Write(devp, MAX17205_AD_COMMAND, 0xE2FB);
+    if (r != MSG_OK) {
+        dbgprintf("Failed to send command to read the lower history write flags.\r\n");
+        return r;
+    }
+    chThdSleepMilliseconds(MAX17205_T_RECAL_MS);
+
+    for (i = 0; i < 15; i++) {
+        r = max17205Read(devp, 0x1E1 + i, &write_flags[i]); // first set starts at 0x1E1, not 0x1E0 as the remaining sets do
+        if (r != MSG_OK) {
+            return r;
+        }
+    }
+
+    r = max17205Write(devp, MAX17205_AD_COMMAND, 0xE2FC);
+    if (r != MSG_OK) {
+        dbgprintf("Failed to send command to read the upper history write flags.\r\n");
+        return r;
+    }
+    chThdSleepMilliseconds(MAX17205_T_RECAL_MS);
+    for (i = 0; i < 11; i++) {
+        r = max17205Read(devp, 0x1E0 + i, &write_flags[i + 15]);
+        if (r != MSG_OK) {
+            return r;
+        }
+    }
+    for (i = 0; i < 5; i++) {
+        r = max17205Read(devp, 0x1EB + i, &valid_flags[i]);
+        if (r != MSG_OK) {
+            return r;
+        }
+    }
+
+    r = max17205Write(devp, MAX17205_AD_COMMAND, 0xE2FD);
+    if (r != MSG_OK) {
+        dbgprintf("Failed to send command to read the lower history valid flags.\r\n");
+        return r;
+    }
+    chThdSleepMilliseconds(MAX17205_T_RECAL_MS);
+    for (i = 0; i < 16; i++) {
+        r = max17205Read(devp, 0x1E0 + i, &valid_flags[i + 5]);
+        if (r != MSG_OK) {
+            return r;
+        }
+    }
+
+    r = max17205Write(devp, MAX17205_AD_COMMAND, 0xE2FE);
+    if (r != MSG_OK) {
+        dbgprintf("Failed to send command to read the upper history valid flags.\r\n");
+        return r;
+    }
+    chThdSleepMilliseconds(MAX17205_T_RECAL_MS);
+    for (i = 0; i < 5; i++) {
+        r = max17205Read(devp, 0x1E0 + i, &valid_flags[i + 21]);
+        if (r != MSG_OK) {
+            return r;
+        }
+    }
+
+    int loop;
+    int word;
+    int position;
+    int flag1;
+    int flag2;
+    int flag3;
+    int flag4;
+
+    //Determine which history pages contain valid data
+    for (loop = 0; loop < 202; loop++)
+    {
+        word = loop / 8;
+        position = loop % 8;
+        flag1 = (write_flags[word] >> position) & 0x0001;
+        flag2 = (write_flags[word] >> (position + 8)) & 0x0001;
+        flag3 = (valid_flags[word] >> position) & 0x0001;
+        flag4 = (valid_flags[word] >> (position + 8)) & 0x0001;
+        if ((flag1 || flag2) && (flag3 || flag4)) {
+            page_good[loop] = true;
+        } else {
+            page_good[loop] = false;
+        }
+    }
+
+    //Read all the history data from the IC
+    history_length = 0;
+    for(loop = 0; loop < 202; loop++)
+    {
+        if (!page_good[loop]) {
+            continue;
+        }
+        r = max17205Write(devp, MAX17205_AD_COMMAND, 0xE226 + loop);
+        if (r != MSG_OK) {
+            dbgprintf("Failed to send command to read the history entry %d\r\n", loop);
+            return r;
+        }
+        chThdSleepMilliseconds(MAX17205_T_RECAL_MS);
+        for (i = 0; i < 16; i++) {
+            r = max17205Read(devp, 0x1E0 + i, &history_data[history_length][i]);
+            if (r != MSG_OK) {
+                return r;
+            }
+        }
+        history_length++;
+    }
+
+    // print out full history
+    dbgprintf("%d History Entries:\r\n", history_length);
+    for (loop = 0; loop < history_length; loop++) {
+        dbgprintf(" Entry %d:\r\n", loop);
+        for (i = 0; i < 16; i++) {
+            dbgprintf("   %-30s register 0x%04X is 0x%04X\r\n", max17205RegToStr(0x1A0 + i), 0x1A0 + i, history_data[loop][i]);
+        }
+    }
+    return MSG_OK;
+}
 
 const char* max17205RegToStr(const uint16_t reg) {
     switch (reg) {
