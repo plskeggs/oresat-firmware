@@ -3,6 +3,7 @@
 #include "max17205.h"
 #include "CANopen.h"
 #include "OD.h"
+#include "chtime.h"
 #include <sys/param.h>
 
 //If batt_nv_programing_cfg registers do not match current, rewrite the RAM shadow then prompt to write to NV.
@@ -14,6 +15,9 @@
 
 //This was disabled per discussion in Slack on April 25, 2001.
 #define ENABLE_CHARGING_CONTROL 0
+
+//Voltage below which we should stop everything until charging starts
+#define SHUTDOWN_MV 2750
 
 #ifdef DEBUG_PRINT
 #include "chprintf.h"
@@ -66,7 +70,7 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
     {MAX17205_AD_NPACKCFG,     PACKCFG },
     {MAX17205_AD_NNVCFG0,      0x09A0 }, // was 0x00B0 -- try Wizard=0x09A0 (old comment: 0x0920)
     {MAX17205_AD_NNVCFG1,      0x8006 }, // was 0xC000 -- try Wizard=0x8006
-    {MAX17205_AD_NNVCFG2,      0xFF0A },
+    {MAX17205_AD_NNVCFG2,      0xFF00 }, // PETE: set back to FF0A after learning tests done
     {MAX17205_AD_NICHGTERM,    0x014D }, // was 0x0034 -- try Wizard=0x14D
     {MAX17205_AD_NVEMPTY,      0x965A }, // VE = 0x12C * 10mV = 3.0v; VR = 0x5A * 40mV = 3.6v
     {MAX17205_AD_NTCURVE,      0x0064 },
@@ -447,8 +451,7 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
         // Answer n to just use the changes in the volatile registers
         dbgprintf("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
         uint8_t ch = 0;
-        sdRead(DEBUG_SD, &ch, 1);
-        dbgprintf("\r\n");
+        sdReadTimeout(DEBUG_SD, &ch, 1, TIME_S2I(15)); // wait 15 seconds for input        dbgprintf("\r\n");
 
         if (ch == 'y') {
             dbgprintf("Attempting to write non volatile memory on MAX17205...\r\n");
@@ -608,6 +611,58 @@ static void populate_od_pack_data(batt_pack_data_t *pack_data) {
 }
 
 
+bool check_for_low_batteries(void)
+{
+    msg_t r;
+
+    dbgprintf("Check for critically low batteries\r\n");
+    if ((r = max17205ReadVoltage(&max17205devPack1, MAX17205_AD_AVGCELL1, &pack_1_data.v_cell_1_mV)) != MSG_OK) {
+        pack_1_data.v_cell_1_mV = 0;
+    }
+    if ((r = max17205ReadBatt(&max17205devPack1, &pack_1_data.batt_mV)) != MSG_OK) {
+        pack_1_data.batt_mV = 0;
+    }
+    pack_1_data.v_cell_2_mV = pack_1_data.batt_mV - pack_1_data.v_cell_1_mV;
+
+    if ((r = max17205ReadVoltage(&max17205devPack2, MAX17205_AD_AVGCELL1, &pack_2_data.v_cell_1_mV)) != MSG_OK) {
+        pack_2_data.v_cell_1_mV = 0;
+    }
+    if ((r = max17205ReadBatt(&max17205devPack2, &pack_2_data.batt_mV)) != MSG_OK) {
+        pack_2_data.batt_mV = 0;
+    }
+    pack_2_data.v_cell_2_mV = pack_2_data.batt_mV - pack_2_data.v_cell_1_mV;
+
+    if ((pack_1_data.v_cell_1_mV < SHUTDOWN_MV) || (pack_1_data.v_cell_2_mV < SHUTDOWN_MV) ||
+        (pack_2_data.v_cell_1_mV < SHUTDOWN_MV) || (pack_2_data.v_cell_2_mV < SHUTDOWN_MV)) {
+        dbgprintf("Batteries are critically low!\r\n");
+        return true;
+    }
+    dbgprintf("Batteries are not critically low\r\n");
+    return false;
+}
+
+void wait_for_charge(void)
+{
+    msg_t r;
+
+    dbgprintf("Critically low batteries; waiting for charging...\r\n");
+    while (!chThdShouldTerminateX()) {
+        chThdSleepMilliseconds(2000);
+        palToggleLine(LINE_LED);
+
+        if ((r = max17205ReadCurrent(&max17205devPack1, MAX17205_AD_CURRENT, &pack_1_data.current_mA)) != MSG_OK) {
+            pack_1_data.current_mA = 0;
+        }
+        if ((r = max17205ReadCurrent(&max17205devPack2, MAX17205_AD_CURRENT, &pack_2_data.current_mA)) != MSG_OK) {
+            pack_2_data.current_mA = 0;
+        }
+        if ((pack_1_data.current_mA < 0) && (pack_2_data.current_mA < 0)) {
+            dbgprintf("Charging detected -- continuing\r\n");
+            break;
+        }
+    }
+}
+
 /* Battery monitoring thread */
 THD_WORKING_AREA(batt_wa, 0x400);
 THD_FUNCTION(batt, arg)
@@ -622,8 +677,15 @@ THD_FUNCTION(batt, arg)
     const bool pack_2_init_flag = max17205Start(&max17205devPack2, &max17205configPack2);
     dbgprintf("max17205Start(pack2) = %u\r\n", pack_2_init_flag);
 
+    if (check_for_low_batteries()) {
+        wait_for_charge();
+    }
+
     max17205PrintintNonvolatileMemory(&max17205devPack1);
     max17205PrintintNonvolatileMemory(&max17205devPack2);
+
+    max17205ReadHistory(&max17205devPack1);
+    max17205ReadHistory(&max17205devPack2);
 
 #if 1
     bool nv_written = false;
@@ -667,13 +729,18 @@ THD_FUNCTION(batt, arg)
         } else {
            // CO_errorReport(CO->em, CO_EM_GENERIC_ERROR, CO_EMC_COMMUNICATION, BATTERY_OD_ERROR_INFO_CODE_PACK_1_COMM_ERROR);
         }
-
+        if ((pack_1_data.v_cell_1_mV < SHUTDOWN_MV) || (pack_1_data.v_cell_2_mV < SHUTDOWN_MV)) {
+            wait_for_charge();
+        }
         dbgprintf("\r\nPopulating Pack 2 Data\r\n");
         if (populate_pack_data(&max17205devPack2, &pack_2_data) ) {
             pack_2_data.pack_number = 2;
             populate_od_pack_data(&pack_2_data);
         } else {
             //CO_errorReport(CO->em, CO_EM_GENERIC_ERROR, CO_EMC_COMMUNICATION, BATTERY_OD_ERROR_INFO_CODE_PACK_2_COMM_ERROR);
+        }
+        if ((pack_2_data.v_cell_1_mV < SHUTDOWN_MV) || (pack_2_data.v_cell_2_mV < SHUTDOWN_MV)) {
+            wait_for_charge();
         }
 
         run_battery_heating_state_machine(&pack_1_data, &pack_2_data);
@@ -684,7 +751,7 @@ THD_FUNCTION(batt, arg)
             prompt_learning_complete(&max17205devPack1, &pack_1_data);
             prompt_learning_complete(&max17205devPack2, &pack_2_data);
         }
-        if ((loop % 1200) == 0) {
+        if ((loop % 480) == 0) {
             max17205PrintintNonvolatileMemory(&max17205devPack1);
             max17205PrintintNonvolatileMemory(&max17205devPack2);
         }

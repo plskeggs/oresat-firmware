@@ -1086,6 +1086,7 @@ msg_t max17205ReadMaxMinTemperature(MAX17205Driver *devp, int8_t * max_C, int8_t
 /* Misc */
 msg_t max17205ReadLearnState(MAX17205Driver *devp, uint8_t *dest);
 msg_t max17205WriteLearnState(MAX17205Driver *devp, uint8_t state);
+msg_t max17205ReadHistory(MAX17205Driver *devp);
 
 msg_t max17205ValidateRegisters(MAX17205Driver *devp, const max17205_regval_t * list, size_t len, bool * valid);
 msg_t max17205WriteRegisters(MAX17205Driver *devp, const max17205_regval_t * list, size_t len);
