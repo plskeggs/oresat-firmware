@@ -728,7 +728,22 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
     uint16_t volatile_reg_list[] = {
         MAX17205_AD_PACKCFG,
         MAX17205_AD_DESIGNCAP,
-        MAX17205_AD_NRSENSE,
+        MAX17205_AD_LEARNCFG,
+        MAX17205_AD_QRTABLE00,
+        MAX17205_AD_QRTABLE10,
+        MAX17205_AD_QRTABLE20,
+        MAX17205_AD_QRTABLE30,
+        MAX17205_AD_CYCLES,
+        MAX17205_AD_FULLCAPNOM,
+        MAX17205_AD_RCOMP0,
+        MAX17205_AD_TEMPCO,
+        MAX17205_AD_IAVGEMPTY,
+        MAX17205_AD_FULLCAPREP,
+        MAX17205_AD_MAXMINCURR,
+        MAX17205_AD_MAXMINVOLT,
+        MAX17205_AD_MAXMINTEMP,
+        MAX17205_AD_MIXSOC,
+        MAX17205_AD_VFSOC
     };
 
     for(size_t i = 0; i < ARRAY_LEN(volatile_reg_list); ++i) {
@@ -983,12 +998,8 @@ const char* max17205RegToStr(const uint16_t reg) {
             return "MAX17205_AD_AVGVCELL";
         case MAX17205_AD_VCELL:
             return "MAX17205_AD_VCELL";
-        case MAX17205_AD_FULLCAP:
-            return "MAX17205_AD_FULLCAP";
         case MAX17205_AD_AVCAP:
             return "MAX17205_AD_AVCAP";
-        case MAX17205_AD_FULLCAPREP:
-            return "MAX17205_AD_FULLCAPREP";
         case MAX17205_AD_MIXCAP:
             return "MAX17205_AD_MIXCAP";
         case MAX17205_AD_TTE:
@@ -997,16 +1008,46 @@ const char* max17205RegToStr(const uint16_t reg) {
             return "MAX17205_AD_TTF";
         case MAX17205_AD_AVSOC:
             return "MAX17205_AD_AVSOC";
-        case MAX17205_AD_VFSOC:
-            return "MAX17205_AD_VFSOC";
-        case MAX17205_AD_CYCLES:
-            return "MAX17205_AD_CYCLES";
         case MAX17205_AD_TEMP:
             return "MAX17205_AD_TEMP";
         case MAX17205_AD_CURRENT:
             return "MAX17205_AD_CURRENT";
         case MAX17205_AD_AVGCURRENT:
             return "MAX17205_AD_AVGCURRENT";
+        case MAX17205_AD_LEARNCFG:
+            return "MAX17205_AD_LEARNCFG";
+        case MAX17205_AD_QRTABLE00:
+            return "MAX17205_AD_QRTABLE00";
+        case MAX17205_AD_QRTABLE10:
+            return "MAX17205_AD_QRTABLE10";
+        case MAX17205_AD_QRTABLE20:
+            return "MAX17205_AD_QRTABLE20";
+        case MAX17205_AD_QRTABLE30:
+            return "MAX17205_AD_QRTABLE30";
+        case MAX17205_AD_CYCLES:
+            return "MAX17205_AD_CYCLES";
+        case MAX17205_AD_FULLCAPNOM:
+            return "MAX17205_AD_FULLCAPNOM";
+        case MAX17205_AD_RCOMP0:
+            return "MAX17205_AD_RCOMP0";
+        case MAX17205_AD_TEMPCO:
+            return "MAX17205_AD_TEMPCO";
+        case MAX17205_AD_IAVGEMPTY:
+            return "MAX17205_AD_IAVGEMPTY";
+        case MAX17205_AD_FULLCAPREP:
+            return "MAX17205_AD_FULLCAPREP";
+        case MAX17205_AD_MAXMINCURR:
+            return "MAX17205_AD_MAXMINCURR";
+        case MAX17205_AD_MAXMINVOLT:
+            return "MAX17205_AD_MAXMINVOLT";
+        case MAX17205_AD_MAXMINTEMP:
+            return "MAX17205_AD_MAXMINTEMP";
+        case MAX17205_AD_MIXSOC:
+            return "MAX17205_AD_MIXSOC";
+        case MAX17205_AD_VFSOC:
+            return "MAX17205_AD_VFSOC";
+        case MAX17205_AD_TIMERH:
+            return "MAX17205_AD_TIMERH";
         case MAX17205_AD_BATT:
             return "MAX17205_AD_BATT";
         case MAX17205_AD_TEMP1:
