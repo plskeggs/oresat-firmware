@@ -1146,6 +1146,8 @@ const char* max17205RegToStr(const uint16_t reg) {
             return "MAX17205_AD_NFILTERCFG";
         case MAX17205_AD_NVEMPTY:
             return "MAX17205_AD_NVEMPTY";
+        case MAX17205_AD_VEMPTY:
+            return "MAX17205_AD_VEMPTY";
         case MAX17205_AD_NLEARNCFG:
             return "MAX17205_AD_NLEARNCFG";
         case MAX17205_AD_NQRTABLE00:

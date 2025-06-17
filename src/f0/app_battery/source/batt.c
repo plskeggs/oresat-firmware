@@ -399,17 +399,10 @@ static bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
 
 /**
  * Helper function to trigger write of volatile memory on MAX71205 chip.
- * Returns true if NV was written, false otherwise.
+ * Returns true if NV RAM was written, false otherwise.
  */
-static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
-    dbgprintf("\r\n%s\r\n", pack_str);
-
-    uint16_t masking_register = 0;
-    uint8_t num_writes_left = 0;
-    if (max17205ReadNVWriteCountMaskingRegister(devp, &masking_register, &num_writes_left) == MSG_OK) {
-        dbgprintf("Memory Update Masking of register is 0x%X, num_writes_left = %u\r\n",
-            masking_register, num_writes_left);
-    }
+static bool nv_ram_write(MAX17205Driver *devp, const char *pack_str) {
+    dbgprintf("\r\nEnsure NV RAM settings are correct%s\r\n", pack_str);
 
     bool all_elements_match = false;
     msg_t r = max17205ValidateRegisters(devp, batt_nv_programing_cfg, ARRAY_LEN(batt_nv_programing_cfg), &all_elements_match);
@@ -419,11 +412,7 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
 
     if (all_elements_match) {
         dbgprintf("All NV RAM elements already match expected values...\r\n");
-#if ENABLE_NV_MEMORY_UPDATE_CODE
-        dbgprintf("Continuing...\r\n");
-#else
         return false;
-#endif
     } else {
         dbgprintf("One or more NV RAM elements don't match expected values...\r\n");
     }
@@ -443,17 +432,36 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
     if (!all_elements_match) {
         dbgprintf("NV RAM elements failed to update after write.\r\n");
         return false;
-    } else {
-        dbgprintf("All NV RAM elements now match expected values.\r\n");
+    }
+
+    dbgprintf("All NV RAM elements now match expected values.\r\n");
+
+    //Now make the chip use the changes written to the shadow registers.
+    max17205FirmwareReset(devp);
+    return true;
+}
+
+/**
+ * Helper function to trigger write of volatile memory on MAX71205 chip.
+ * Returns true if NV was written, false otherwise.
+ */
+static bool prompt_nv_write(MAX17205Driver *devp, const char *pack_str) {
+    dbgprintf("\r\nWrite NV RAM to NV%s\r\n", pack_str);
+
+    uint16_t masking_register = 0;
+    uint8_t num_writes_left = 0;
+    if (max17205ReadNVWriteCountMaskingRegister(devp, &masking_register, &num_writes_left) == MSG_OK) {
+        dbgprintf("Memory Update Masking of register is 0x%X, num_writes_left = %u\r\n",
+            masking_register, num_writes_left);
     }
 
 #if ENABLE_NV_MEMORY_UPDATE_CODE && defined(DEBUG_PRINT)
-
     if (num_writes_left > 0) {
         // Answer n to just use the changes in the volatile registers
         dbgprintf("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
         uint8_t ch = 0;
-        sdReadTimeout(DEBUG_SD, &ch, 1, TIME_S2I(15)); // wait 15 seconds for input        dbgprintf("\r\n");
+        sdReadTimeout(DEBUG_SD, &ch, 1, TIME_S2I(15)); // wait 15 seconds for input
+        dbgprintf("\r\n");
 
         if (ch == 'y') {
             dbgprintf("Attempting to write non volatile memory on MAX17205...\r\n");
@@ -465,53 +473,52 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
                 dbgprintf("Failed to write non volatile memory on MAX17205...\r\n");
             }
             return true; // NV changes made
+        } else {
+            dbgprintf("Update skipped.\r\n");
         }
     } else {
         dbgprintf("No more NV writes remain.\r\n");
     }
 #endif
 
-    //Now make the chip use the changes written to the shadow registers.
-    max17205FirmwareReset(devp);
     return false; // no NV changes made
 }
 
 //If state of charge is known to be full, set LS bits D6-D0 of LearnCfg register to 0b111
 //and write MixCap and RepCap registers to 2600.
-static void update_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pack) {
+static bool update_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pack) {
     if ((pack->batt_mV > 8000) &&
         (pack->avg_current_mA < 50) &&
         (pack->avg_current_mA >= 0) &&
         (pack->full_capacity_mAh >= 2600)) {
+
         dbgprintf("Pack %d seems full\r\n", pack->pack_number);
         uint8_t state;
         msg_t r = max17205ReadLearnState(devp, &state);
         if (r != MSG_OK) {
             dbgprintf("Error reading learn state\r\n");
-            return;
+            return false;
         }
         dbgprintf("Learning state = %u\r\n", state);
-        if ((state == 7) &&
-            (pack->mix_capacity_mAh == pack->full_capacity_mAh) &&
-            (pack->reported_capacity_mAh == pack->full_capacity_mAh)) {
-            dbgprintf("Learning is complete.\r\n");
-            return;
+        if (state == 7) {
+            dbgprintf("Learning is already complete.\r\n");
+            return false;
         }
         r = max17205WriteLearnState(devp, 7);
         if (r != MSG_OK) {
             dbgprintf("Error writing learn state\r\n");
-            return;
+            return false;
         }
         r = max17205ReadLearnState(devp, &state);
         if (r != MSG_OK) {
             dbgprintf("Error checking learn state\r\n");
-            return;
+            return false;
         }
         if (state != 7) {
             dbgprintf("Error setting state = %u; is %u\r\n", 7, state);
-        } else {
-            dbgprintf("Learning state set = %u\r\n", state);
+            return false;
         }
+        dbgprintf("Learning state set = %u\r\n", state);
         pack->mix_capacity_mAh = pack->reported_capacity_mAh = pack->full_capacity_mAh;
         if ( (r = max17205WriteCapacity(devp, MAX17205_AD_MIXCAP, pack->mix_capacity_mAh)) != MSG_OK ) {
             dbgprintf("Failed to write MIXCAP\r\n");
@@ -520,7 +527,9 @@ static void update_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pac
         } else {
             dbgprintf("Mixcap and repcap set to %u\r\n", pack->full_capacity_mAh);
         }
+        return true;
     }
+    return false;
 }
 
 
@@ -683,28 +692,32 @@ THD_FUNCTION(batt, arg)
         wait_for_charge();
     }
 
+    bool pack_1_updated = nv_ram_write(&max17205devPack1, "Pack 1");
     max17205PrintVolatileMemory(&max17205devPack1);
     max17205PrintNonvolatileMemory(&max17205devPack1);
     max17205ReadHistory(&max17205devPack1);
-    update_learning_complete(&max17205devPack1, &pack_1_data);
+    populate_pack_data(&max17205devPack1, &pack_1_data);
+    pack_1_updated |= update_learning_complete(&max17205devPack1, &pack_1_data);
 
+    bool pack_2_updated = nv_ram_write(&max17205devPack2, "Pack 2");
     max17205PrintVolatileMemory(&max17205devPack2);
     max17205PrintNonvolatileMemory(&max17205devPack2);
     max17205ReadHistory(&max17205devPack2);
-    update_learning_complete(&max17205devPack2, &pack_2_data);
+    populate_pack_data(&max17205devPack2, &pack_2_data);
+    pack_2_updated |= update_learning_complete(&max17205devPack2, &pack_2_data);
 
     bool nv_written = false;
 
-    if( pack_1_init_flag ) {
-        nv_written |= prompt_nv_memory_write(&max17205devPack1, "Pack 1");
+    if (pack_1_init_flag && pack_1_updated) {
+        nv_written |= prompt_nv_write(&max17205devPack1, "Pack 1");
     } else {
-        dbgprintf("Skipping NV prompt for pack 1 as it failed to initialize...\r\n");
+        dbgprintf("Skipping NV prompt for pack 1 as it failed to initialize or no changes needed.\r\n");
     }
 
-    if( pack_2_init_flag ) {
-        nv_written |= prompt_nv_memory_write(&max17205devPack2, "Pack 2");
+    if (pack_2_init_flag && pack_2_updated) {
+        nv_written |= prompt_nv_write(&max17205devPack2, "Pack 2");
     } else {
-        dbgprintf("Skipping NV prompt for pack 2 as it failed to initialize...\r\n");
+        dbgprintf("Skipping NV prompt for pack 2 as it failed to initialize or no changes needed.\r\n");
     }
 
     if (nv_written) {
