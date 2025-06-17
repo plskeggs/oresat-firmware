@@ -656,7 +656,7 @@ void wait_for_charge(void)
         if ((r = max17205ReadCurrent(&max17205devPack2, MAX17205_AD_CURRENT, &pack_2_data.current_mA)) != MSG_OK) {
             pack_2_data.current_mA = 0;
         }
-        if ((pack_1_data.current_mA < 0) && (pack_2_data.current_mA < 0)) {
+        if ((pack_1_data.current_mA > 20) && (pack_2_data.current_mA > 20)) {
             dbgprintf("Charging detected -- continuing\r\n");
             break;
         }
@@ -748,8 +748,8 @@ THD_FUNCTION(batt, arg)
         update_battery_charging_state(&pack_2_data, LINE_DCHG_DIS_PK2, LINE_CHG_DIS_PK2);
 
         if ((loop % 240) == 0) {
-            prompt_learning_complete(&max17205devPack1, &pack_1_data);
-            prompt_learning_complete(&max17205devPack2, &pack_2_data);
+            //prompt_learning_complete(&max17205devPack1, &pack_1_data);
+            //prompt_learning_complete(&max17205devPack2, &pack_2_data);
         }
         if ((loop % 480) == 0) {
             max17205PrintintNonvolatileMemory(&max17205devPack1);
