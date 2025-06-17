@@ -715,7 +715,7 @@ msg_t max17205WriteRegisters(MAX17205Driver *devp, const max17205_regval_t * lis
     return MSG_OK;
 }
 
-msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
+msg_t max17205PrintVolatileMemory(MAX17205Driver *devp) {
     osalDbgAssert(devp->state == MAX17205_READY, "max17205ReadTime(), invalid state");
     uint16_t masking_register = 0;
     uint8_t num_left = 0;
@@ -743,7 +743,8 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
         MAX17205_AD_MAXMINVOLT,
         MAX17205_AD_MAXMINTEMP,
         MAX17205_AD_MIXSOC,
-        MAX17205_AD_VFSOC
+        MAX17205_AD_VFSOC,
+        MAX17205_AD_VEMPTY
     };
 
     for(size_t i = 0; i < ARRAY_LEN(volatile_reg_list); ++i) {
@@ -753,6 +754,17 @@ msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp) {
             return r;
         }
         dbgprintf("   %-30s register 0x%04X is 0x%04X\r\n", max17205RegToStr(volatile_reg_list[i]), volatile_reg_list[i], buf);
+    }
+    return MSG_OK;
+}
+
+msg_t max17205PrintNonvolatileMemory(MAX17205Driver *devp) {
+    osalDbgAssert(devp->state == MAX17205_READY, "max17205ReadTime(), invalid state");
+    uint16_t masking_register = 0;
+    uint8_t num_left = 0;
+    msg_t r = max17205ReadNVWriteCountMaskingRegister(devp, &masking_register, &num_left);
+    if (r != MSG_OK) {
+        return r;
     }
 
     // See table 19 on page 83 of the data sheet to see the list of non-volatile registers

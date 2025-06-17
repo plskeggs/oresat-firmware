@@ -17,7 +17,7 @@
 #define ENABLE_CHARGING_CONTROL 0
 
 //Voltage below which we should stop everything until charging starts
-#define SHUTDOWN_MV 2750
+#define SHUTDOWN_MV 2850
 
 #ifdef DEBUG_PRINT
 #include "chprintf.h"
@@ -70,7 +70,7 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
     {MAX17205_AD_NPACKCFG,     PACKCFG },
     {MAX17205_AD_NNVCFG0,      0x09A0 }, // was 0x00B0 -- try Wizard=0x09A0 (old comment: 0x0920)
     {MAX17205_AD_NNVCFG1,      0x8006 }, // was 0xC000 -- try Wizard=0x8006
-    {MAX17205_AD_NNVCFG2,      0xFF00 }, // PETE: set back to FF0A after learning tests done
+    {MAX17205_AD_NNVCFG2,      0xFF0A }, // life logging every 10 cycles
     {MAX17205_AD_NICHGTERM,    0x014D }, // was 0x0034 -- try Wizard=0x14D
     {MAX17205_AD_NVEMPTY,      0x965A }, // VE = 0x12C * 10mV = 3.0v; VR = 0x5A * 40mV = 3.6v
     {MAX17205_AD_NTCURVE,      0x0064 },
@@ -78,7 +78,7 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
     {MAX17205_AD_NTOFF,        0x16A1 },
     {MAX17205_AD_NDESIGNCAP,   0x1450 }, // 5200 (0.5 increments)
     {MAX17205_AD_NFULLCAPREP,  0x1450 },
-    {MAX17205_AD_NFULLCAPNOM,  0x1450 }, // was 0x1450 -- try Wizard=0x1794
+    {MAX17205_AD_NFULLCAPNOM,  0x1A22 }, // Wizard=0x1794; full learning cycle found 0x1A22 on average of 2 packs
 
     // Missing from in flight fw, but present in Wizard output with m5 EZ battery model:
     {MAX17205_AD_NQRTABLE00,   0x2280 },
@@ -90,7 +90,8 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
     {MAX17205_AD_NMISCCFG,     0x3070 },
     {MAX17205_AD_NCONVGCFG,    0x2241 },
     {MAX17205_AD_NFULLSOCTHR,  0x5005 },
-    {MAX17205_AD_NRIPPLECFGCFG,0x0204 }
+    {MAX17205_AD_NRIPPLECFGCFG,0x0204 },
+    {MAX17205_AD_NRCOMP0,      0x006F }
 };
 
 
@@ -219,16 +220,16 @@ static void run_battery_heating_state_machine(batt_pack_data_t *pk1_data, batt_p
  * @param[in] line_chg_dis ioline to control of the charge disable pin.
  */
 static void update_battery_charging_state(const batt_pack_data_t * const pk_data, const ioline_t line_dchg_dis, const ioline_t line_chg_dis) {
+    dbgprintf("LINE_DCHG_STAT_PK1 = %u\r\n", palReadLine(LINE_DCHG_STAT_PK1));
+    dbgprintf("LINE_CHG_STAT_PK1  = %u\r\n", palReadLine(LINE_CHG_STAT_PK1));
+    dbgprintf("LINE_DCHG_STAT_PK2 = %u\r\n", palReadLine(LINE_DCHG_STAT_PK2));
+    dbgprintf("LINE_CHG_STAT_PK2  = %u\r\n", palReadLine(LINE_CHG_STAT_PK2));
+
 #if !ENABLE_CHARGING_CONTROL
     (void)pk_data;
     (void)line_dchg_dis;
     (void)line_chg_dis;
 #else
-    dbgprintf("LINE_DCHG_STAT_PK1 = %u\r\n", palReadLine(LINE_DCHG_STAT_PK1));
-    dbgprintf("LINE_CHG_STAT_PK1 = %u\r\n", palReadLine(LINE_CHG_STAT_PK1));
-    dbgprintf("LINE_DCHG_STAT_PK2 = %u\r\n", palReadLine(LINE_DCHG_STAT_PK2));
-    dbgprintf("LINE_CHG_STAT_PK2 = %u\r\n", palReadLine(LINE_CHG_STAT_PK2));
-
     if (!pk_data->is_data_valid) {
         //fail safe mode
         palSetLine(line_dchg_dis);
@@ -377,14 +378,15 @@ static bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
     dbgprintf("Voltage (mV):    cell1 = %u, cell2 = %u, vcell = %u, max = %d, min %d, batt = %u\r\n",
               dest->v_cell_1_mV, dest->v_cell_2_mV, dest->v_cell_mV, dest->v_cell_max_volt_mV, dest->v_cell_min_volt_mV, dest->batt_mV);
 
-    dbgprintf("Current (mA):    max = %d, min = %d, avg: %d\r\n",
-              dest->max_current_mA, dest->min_current_mA, dest->avg_current_mA);
+    dbgprintf("Current (mA):    cur = %d, max = %d, min = %d, avg = %d\r\n",
+              dest->current_mA, dest->max_current_mA, dest->min_current_mA, dest->avg_current_mA);
 
     dbgprintf("Capacity (mAh):  full = %u, available = %u, mix = %u, reported = %u\r\n",
               dest->full_capacity_mAh, dest->available_capacity_mAh, dest->mix_capacity_mAh, dest->reported_capacity_mAh);
 
     dbgprintf("Time (seconds):  to_empty =%u, to_full = %u\r\n",
               dest->time_to_empty_seconds, dest->time_to_full_seconds);
+
     dbgprintf("SOC (%):         available = %u%%\r\n",
               dest->available_state_of_charge);
 
@@ -476,9 +478,10 @@ static bool prompt_nv_memory_write(MAX17205Driver *devp, const char *pack_str) {
 
 //If state of charge is known to be full, set LS bits D6-D0 of LearnCfg register to 0b111
 //and write MixCap and RepCap registers to 2600.
-static void prompt_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pack) {
-    if ((pack->batt_mV >= 7200) &&
+static void update_learning_complete(MAX17205Driver *devp, batt_pack_data_t *pack) {
+    if ((pack->batt_mV > 8000) &&
         (pack->avg_current_mA < 50) &&
+        (pack->avg_current_mA >= 0) &&
         (pack->full_capacity_mAh >= 2600)) {
         dbgprintf("Pack %d seems full\r\n", pack->pack_number);
         uint8_t state;
@@ -610,7 +613,6 @@ static void populate_od_pack_data(batt_pack_data_t *pack_data) {
     }
 }
 
-
 bool check_for_low_batteries(void)
 {
     msg_t r;
@@ -647,7 +649,7 @@ void wait_for_charge(void)
 
     dbgprintf("Critically low batteries; waiting for charging...\r\n");
     while (!chThdShouldTerminateX()) {
-        chThdSleepMilliseconds(2000);
+        chThdSleepMilliseconds(5000);
         palToggleLine(LINE_LED);
 
         if ((r = max17205ReadCurrent(&max17205devPack1, MAX17205_AD_CURRENT, &pack_1_data.current_mA)) != MSG_OK) {
@@ -681,13 +683,16 @@ THD_FUNCTION(batt, arg)
         wait_for_charge();
     }
 
-    max17205PrintintNonvolatileMemory(&max17205devPack1);
-    max17205PrintintNonvolatileMemory(&max17205devPack2);
-
+    max17205PrintVolatileMemory(&max17205devPack1);
+    max17205PrintNonvolatileMemory(&max17205devPack1);
     max17205ReadHistory(&max17205devPack1);
-    max17205ReadHistory(&max17205devPack2);
+    update_learning_complete(&max17205devPack1, &pack_1_data);
 
-#if 1
+    max17205PrintVolatileMemory(&max17205devPack2);
+    max17205PrintNonvolatileMemory(&max17205devPack2);
+    max17205ReadHistory(&max17205devPack2);
+    update_learning_complete(&max17205devPack2, &pack_2_data);
+
     bool nv_written = false;
 
     if( pack_1_init_flag ) {
@@ -709,7 +714,6 @@ THD_FUNCTION(batt, arg)
             chThdSleepMilliseconds(1000);
         }
     }
-#endif
 
     uint32_t loop = 0;
     while (!chThdShouldTerminateX()) {
@@ -748,12 +752,8 @@ THD_FUNCTION(batt, arg)
         update_battery_charging_state(&pack_2_data, LINE_DCHG_DIS_PK2, LINE_CHG_DIS_PK2);
 
         if ((loop % 240) == 0) {
-            //prompt_learning_complete(&max17205devPack1, &pack_1_data);
-            //prompt_learning_complete(&max17205devPack2, &pack_2_data);
-        }
-        if ((loop % 480) == 0) {
-            max17205PrintintNonvolatileMemory(&max17205devPack1);
-            max17205PrintintNonvolatileMemory(&max17205devPack2);
+            max17205PrintVolatileMemory(&max17205devPack1);
+            max17205PrintVolatileMemory(&max17205devPack2);
         }
     }
 

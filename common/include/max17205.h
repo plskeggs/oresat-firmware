@@ -1095,7 +1095,8 @@ msg_t max17205HardwareReset(MAX17205Driver *devp);
 
 msg_t max17205ReadNVWriteCountMaskingRegister(MAX17205Driver *devp, uint16_t *reg_dest, uint8_t *number_of_writes_left);
 msg_t max17205NonvolatileBlockProgram(MAX17205Driver *devp);
-msg_t max17205PrintintNonvolatileMemory(MAX17205Driver *devp);
+msg_t max17205PrintVolatileMemory(MAX17205Driver *devp);
+msg_t max17205PrintNonvolatileMemory(MAX17205Driver *devp);
 
 const char* max17205RegToStr(const uint16_t reg);
 
